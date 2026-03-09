@@ -1,7 +1,7 @@
 
 // api.js — Llamadas al backend Apps Script
 // ⚠️  Reemplazá esta URL con la de tu Web App publicada
-export const API_URL = "https://script.google.com/macros/s/TU_DEPLOYMENT_ID/exec";
+export const API_URL = "https://script.google.com/macros/s/AKfycbym55Ip18F84jBZZUf3kXfPpYwcwK-AdHNO6RdXE4PUYb_i7kXvjgNHZ_J3uQFYKdY/exec";
 
 const TIMEOUT_MS = 20000;
 
