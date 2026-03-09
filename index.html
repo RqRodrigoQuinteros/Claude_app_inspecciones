@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sanidad PWA</title>
+    <style>
+        :root { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --accent: #3b82f6; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding: 20px; }
+        .card { background: var(--card); padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #334155; }
+        input, select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; }
+        button { background: var(--accent); color: white; border: none; padding: 15px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .status-bar { padding: 5px 10px; font-size: 12px; border-radius: 20px; display: inline-block; margin-bottom: 10px; }
+        .online { background: #065f46; color: #34d399; }
+        .offline { background: #7f1d1d; color: #f87171; }
+    </style>
+</head>
+<body>
+    <div id="net-status" class="status-bar online">Online</div>
+    
+    <div id="app">
+        <h2>Nueva Inspección</h2>
+        <div class="card">
+            <label>Inspector</label>
+            <input type="text" id="inspector" placeholder="Tu nombre">
+            
+            <label>Establecimiento</label>
+            <input type="text" id="establecimiento" placeholder="Nombre del local">
+            
+            <label>Tipología</label>
+            <select id="tipologia">
+                <option value="CLINICA">Clínica</option>
+                <option value="OPTICA">Óptica</option>
+            </select>
+            
+            <button onclick="guardarInspeccion()">GUARDAR (OFFLINE)</button>
+        </div>
+        
+        <h3>Pendientes de Sincronizar</h3>
+        <div id="lista-pendientes"></div>
+    </div>
+
+    <script>
+        // --- MOTOR INDEXED DB ---
+        let db;
+        const request = indexedDB.open("SanidadDB", 1);
+
+        request.onupgradeneeded = (e) => {
+            db = e.target.result;
+            db.createObjectStore("inspecciones", { keyPath: "id" });
+        };
+
+        request.onsuccess = (e) => {
+            db = e.target.result;
+            mostrarPendientes();
+        };
+
+        // --- LÓGICA DE GUARDADO ---
+        async function guardarInspeccion() {
+            const data = {
+                id: Date.now().toString(),
+                inspector: document.getElementById('inspector').value,
+                establecimiento: document.getElementById('establecimiento').value,
+                tipologia: document.getElementById('tipologia').value,
+                estado: "PENDIENTE"
+            };
+
+            const tx = db.transaction("inspecciones", "readwrite");
+            tx.objectStore("inspecciones").add(data);
+            
+            alert("Guardado en la tablet con éxito.");
+            mostrarPendientes();
+            intentarSincronizar();
+        }
+
+        // --- SINCRONIZACIÓN ---
+        async function intentarSincronizar() {
+            if (!navigator.onLine) return;
+
+            const tx = db.transaction("inspecciones", "readonly");
+            const store = tx.objectStore("inspecciones");
+            const todas = await new Promise(res => {
+                store.getAll().onsuccess = (e) => res(e.target.result);
+            });
+
+            for (let insp of todas) {
+                try {
+                    const response = await fetch("https://script.google.com/macros/s/AKfycby6eQK9ifOwj3G0ClOILUVzOvr2ARkuzfYDgscyAPA98XQKjnA_ghdUmnpWROaISCplBA/exec", {
+                        method: "POST",
+                        body: JSON.stringify(insp)
+                    });
+                    
+                    if (response.ok) {
+                        const resJson = await response.json();
+                        if (resJson.status === "success") {
+                            // Si se subió, lo borramos de la tablet
+                            const delTx = db.transaction("inspecciones", "readwrite");
+                            delTx.objectStore("inspecciones").delete(insp.id);
+                        }
+                    }
+                } catch (err) { console.log("Fallo envío, queda en local"); }
+            }
+            mostrarPendientes();
+        }
+
+        function mostrarPendientes() {
+            const container = document.getElementById('lista-pendientes');
+            const tx = db.transaction("inspecciones", "readonly");
+            tx.objectStore("inspecciones").getAll().onsuccess = (e) => {
+                const pendientes = e.target.result;
+                container.innerHTML = pendientes.map(i => `<div class="card">${i.establecimiento} (${i.tipologia})</div>`).join('');
+            };
+        }
+
+        // Detectar cambio de red
+        window.addEventListener('online', () => {
+            document.getElementById('net-status').className = "status-bar online";
+            document.getElementById('net-status').innerText = "Online";
+            intentarSincronizar();
+        });
+        window.addEventListener('offline', () => {
+            document.getElementById('net-status').className = "status-bar offline";
+            document.getElementById('net-status').innerText = "Offline";
+        });
+    </script>
+</body>
+</html>
