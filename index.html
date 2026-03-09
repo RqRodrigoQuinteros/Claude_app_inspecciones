@@ -6,123 +6,102 @@
     <link rel="manifest" href="manifest.json">
     <title>Sanidad PWA</title>
     <style>
-        :root { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --accent: #3b82f6; }
-        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding: 20px; }
-        .card { background: var(--card); padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #334155; }
-        input, select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; }
-        button { background: var(--accent); color: white; border: none; padding: 15px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        .status-bar { padding: 5px 10px; font-size: 12px; border-radius: 20px; display: inline-block; margin-bottom: 10px; }
-        .online { background: #065f46; color: #34d399; }
-        .offline { background: #7f1d1d; color: #f87171; }
-    </style>
-</head>
-<body>
-    <div id="net-status" class="status-bar online">Online</div>
+    /* Variables y Reset */
+    :root { 
+        --bg: #0f172a; --surface: #1e293b; --accent: #3b82f6; --text: #f1f5f9; 
+    }
+    body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; padding-bottom: 80px; }
     
-    <div id="app">
-        <h2>Nueva Inspección</h2>
-        <div class="card">
-            <label>Inspector</label>
-            <input type="text" id="inspector" placeholder="Tu nombre">
-            
-            <label>Establecimiento</label>
-            <input type="text" id="establecimiento" placeholder="Nombre del local">
-            
-            <label>Tipología</label>
-            <select id="tipologia">
-                <option value="CLINICA">Clínica</option>
-                <option value="OPTICA">Óptica</option>
-            </select>
-            
-            <button onclick="guardarInspeccion()">GUARDAR (OFFLINE)</button>
-        </div>
-        
-        <h3>Pendientes de Sincronizar</h3>
-        <div id="lista-pendientes"></div>
+    /* Header Fijo */
+    header { 
+        position: sticky; top: 0; background: var(--surface); padding: 15px; 
+        display: flex; justify-content: space-between; border-bottom: 1px solid #334155; z-index: 100;
+    }
+
+    /* Navegación por Chips (Secciones) */
+    .tabs-container { 
+        display: flex; overflow-x: auto; padding: 10px; gap: 10px; background: var(--bg); 
+    }
+    .chip { 
+        padding: 8px 16px; background: var(--surface); border-radius: 20px; 
+        font-size: 14px; white-space: nowrap; border: 1px solid #334155;
+    }
+    .chip.active { background: var(--accent); border-color: var(--accent); }
+
+    /* Contenedor de Formularios */
+    .form-step { display: none; padding: 20px; animation: fadeIn 0.3s; }
+    .form-step.active { display: block; }
+
+    /* Footer de Navegación */
+    footer { 
+        position: fixed; bottom: 0; width: 100%; background: var(--surface); 
+        padding: 15px; display: flex; gap: 10px; border-top: 1px solid #334155;
+    }
+    
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+
+<body>
+    <header>
+        <span id="brand">SANIDAD <b>PRO</b></span>
+        <div id="net-indicator" class="status-dot"></div>
+    </header>
+
+    <div class="tabs-container" id="tabs">
+        <div class="chip active" onclick="showStep(0)">Gral</div>
+        <div class="chip" onclick="showStep(1)">D.T.</div>
+        <div class="chip" onclick="showStep(2)">Registros</div>
+        <div class="chip" onclick="showStep(3)">Firma</div>
     </div>
 
+    <div id="step-0" class="form-step active">
+        <h3>Datos Generales</h3>
+        <input type="text" id="nro_exp" placeholder="N° Expediente">
+        <input type="text" id="estab" placeholder="Establecimiento">
+        <select id="tipologia">
+            <option value="CLINICA">CLINICA</option>
+            <option value="OPTICA">OPTICA</option>
+        </select>
+    </div>
+
+    <div id="step-1" class="form-step">
+        <h3>Director Técnico</h3>
+        <input type="text" id="dt_nombre" placeholder="Nombre completo">
+        <input type="number" id="dt_dni" placeholder="DNI">
+        <label>¿Presente?</label>
+        <div style="display:flex; gap:10px; margin-top:10px;">
+            <button onclick="setVal('dt_pres','SI')" class="btn-sn">SI</button>
+            <button onclick="setVal('dt_pres','NO')" class="btn-sn" style="background:#ef4444">NO</button>
+        </div>
+    </div>
+
+    <div id="step-3" class="form-step">
+        <h3>Finalizar</h3>
+        <div id="signature-pad" style="width:100%; height:200px; background:white; border-radius:8px;"></div>
+        <button onclick="enviarFinal()" style="margin-top:20px;">GUARDAR E INSPECCIONAR</button>
+    </div>
+
+    <footer>
+        <button onclick="prevStep()" style="background:#475569">Anterior</button>
+        <button onclick="nextStep()">Siguiente</button>
+    </footer>
+
     <script>
-        // --- MOTOR INDEXED DB ---
-        let db;
-        const request = indexedDB.open("SanidadDB", 1);
+        let currentStep = 0;
+        const totalSteps = 4;
 
-        request.onupgradeneeded = (e) => {
-            db = e.target.result;
-            db.createObjectStore("inspecciones", { keyPath: "id" });
-        };
-
-        request.onsuccess = (e) => {
-            db = e.target.result;
-            mostrarPendientes();
-        };
-
-        // --- LÓGICA DE GUARDADO ---
-        async function guardarInspeccion() {
-            const data = {
-                id: Date.now().toString(),
-                inspector: document.getElementById('inspector').value,
-                establecimiento: document.getElementById('establecimiento').value,
-                tipologia: document.getElementById('tipologia').value,
-                estado: "PENDIENTE"
-            };
-
-            const tx = db.transaction("inspecciones", "readwrite");
-            tx.objectStore("inspecciones").add(data);
+        function showStep(n) {
+            document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
             
-            alert("Guardado en la tablet con éxito.");
-            mostrarPendientes();
-            intentarSincronizar();
+            document.getElementById(`step-${n}`).classList.add('active');
+            document.querySelectorAll('.chip')[n].classList.add('active');
+            currentStep = n;
+            window.scrollTo(0,0);
         }
 
-        // --- SINCRONIZACIÓN ---
-        async function intentarSincronizar() {
-            if (!navigator.onLine) return;
-
-            const tx = db.transaction("inspecciones", "readonly");
-            const store = tx.objectStore("inspecciones");
-            const todas = await new Promise(res => {
-                store.getAll().onsuccess = (e) => res(e.target.result);
-            });
-
-            for (let insp of todas) {
-                try {
-                    const response = await fetch("https://script.google.com/macros/s/AKfycby6eQK9ifOwj3G0ClOILUVzOvr2ARkuzfYDgscyAPA98XQKjnA_ghdUmnpWROaISCplBA/exec", {
-                        method: "POST",
-                        body: JSON.stringify(insp)
-                    });
-                    
-                    if (response.ok) {
-                        const resJson = await response.json();
-                        if (resJson.status === "success") {
-                            // Si se subió, lo borramos de la tablet
-                            const delTx = db.transaction("inspecciones", "readwrite");
-                            delTx.objectStore("inspecciones").delete(insp.id);
-                        }
-                    }
-                } catch (err) { console.log("Fallo envío, queda en local"); }
-            }
-            mostrarPendientes();
-        }
-
-        function mostrarPendientes() {
-            const container = document.getElementById('lista-pendientes');
-            const tx = db.transaction("inspecciones", "readonly");
-            tx.objectStore("inspecciones").getAll().onsuccess = (e) => {
-                const pendientes = e.target.result;
-                container.innerHTML = pendientes.map(i => `<div class="card">${i.establecimiento} (${i.tipologia})</div>`).join('');
-            };
-        }
-
-        // Detectar cambio de red
-        window.addEventListener('online', () => {
-            document.getElementById('net-status').className = "status-bar online";
-            document.getElementById('net-status').innerText = "Online";
-            intentarSincronizar();
-        });
-        window.addEventListener('offline', () => {
-            document.getElementById('net-status').className = "status-bar offline";
-            document.getElementById('net-status').innerText = "Offline";
-        });
+        function nextStep() { if(currentStep < totalSteps-1) showStep(currentStep + 1); }
+        function prevStep() { if(currentStep > 0) showStep(currentStep - 1); }
         if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js')
     .then(() => console.log("Service Worker Activo"));
