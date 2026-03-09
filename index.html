@@ -122,6 +122,10 @@
             document.getElementById('net-status').className = "status-bar offline";
             document.getElementById('net-status').innerText = "Offline";
         });
+        if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js')
+    .then(() => console.log("Service Worker Activo"));
+}
     </script>
 </body>
 </html>
