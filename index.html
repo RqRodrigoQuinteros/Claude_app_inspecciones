@@ -1,111 +1,171 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="manifest" href="manifest.json">
-    <title>Sanidad PWA</title>
-    <style>
-    /* Variables y Reset */
-    :root { 
-        --bg: #0f172a; --surface: #1e293b; --accent: #3b82f6; --text: #f1f5f9; 
-    }
-    body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; padding-bottom: 80px; }
-    
-    /* Header Fijo */
-    header { 
-        position: sticky; top: 0; background: var(--surface); padding: 15px; 
-        display: flex; justify-content: space-between; border-bottom: 1px solid #334155; z-index: 100;
-    }
-
-    /* Navegación por Chips (Secciones) */
-    .tabs-container { 
-        display: flex; overflow-x: auto; padding: 10px; gap: 10px; background: var(--bg); 
-    }
-    .chip { 
-        padding: 8px 16px; background: var(--surface); border-radius: 20px; 
-        font-size: 14px; white-space: nowrap; border: 1px solid #334155;
-    }
-    .chip.active { background: var(--accent); border-color: var(--accent); }
-
-    /* Contenedor de Formularios */
-    .form-step { display: none; padding: 20px; animation: fadeIn 0.3s; }
-    .form-step.active { display: block; }
-
-    /* Footer de Navegación */
-    footer { 
-        position: fixed; bottom: 0; width: 100%; background: var(--surface); 
-        padding: 15px; display: flex; gap: 10px; border-top: 1px solid #334155;
-    }
-    
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-</style>
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Inspecciones">
+  <meta name="theme-color" content="#0c1322">
+  <title>Inspecciones Sanitarias</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/app.css">
+</head>
 <body>
-    <header>
-        <span id="brand">SANIDAD <b>PRO</b></span>
-        <div id="net-indicator" class="status-dot"></div>
-    </header>
 
-    <div class="tabs-container" id="tabs">
-        <div class="chip active" onclick="showStep(0)">Gral</div>
-        <div class="chip" onclick="showStep(1)">D.T.</div>
-        <div class="chip" onclick="showStep(2)">Registros</div>
-        <div class="chip" onclick="showStep(3)">Firma</div>
+<!-- Loading -->
+<div id="overlay">
+  <div class="spinner"></div>
+  <span id="loading-msg">Cargando...</span>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<!-- Header -->
+<header id="header" class="hidden">
+  <div class="hdr-l">
+    <button class="hdr-btn hidden" id="btn-back">← Volver</button>
+    <span id="hdr-title">Inspecciones</span>
+  </div>
+  <div class="hdr-r">
+    <span class="dot offline" id="conn-dot"></span>
+    <div class="sync-wrap">
+      <button class="hdr-btn" id="btn-sync">⇅</button>
+      <span class="hidden" id="sync-badge">0</span>
     </div>
+    <button class="hdr-btn primary hidden" id="btn-save">Guardar</button>
+    <button class="hdr-btn" id="btn-logout">Salir</button>
+  </div>
+</header>
 
-    <div id="step-0" class="form-step active">
-        <h3>Datos Generales</h3>
-        <input type="text" id="nro_exp" placeholder="N° Expediente">
-        <input type="text" id="estab" placeholder="Establecimiento">
-        <select id="tipologia">
-            <option value="CLINICA">CLINICA</option>
-            <option value="OPTICA">OPTICA</option>
-        </select>
-    </div>
+<div id="screens">
 
-    <div id="step-1" class="form-step">
-        <h3>Director Técnico</h3>
-        <input type="text" id="dt_nombre" placeholder="Nombre completo">
-        <input type="number" id="dt_dni" placeholder="DNI">
-        <label>¿Presente?</label>
-        <div style="display:flex; gap:10px; margin-top:10px;">
-            <button onclick="setVal('dt_pres','SI')" class="btn-sn">SI</button>
-            <button onclick="setVal('dt_pres','NO')" class="btn-sn" style="background:#ef4444">NO</button>
+  <!-- ══ LOGIN ══ -->
+  <div class="screen active" id="scr-login">
+    <div class="login-wrap">
+      <div class="login-brand">
+        <div class="login-ico">📋</div>
+        <h1 class="login-title">Inspecciones<br><b>Sanitarias</b></h1>
+        <p class="login-sub">Ministerio de Salud · Córdoba</p>
+      </div>
+      <div class="login-card">
+        <div class="fg">
+          <label class="lbl">Inspector</label>
+          <select class="sel" id="sel-insp">
+            <option value="">— Seleccioná —</option>
+          </select>
         </div>
+        <div class="fg">
+          <label class="lbl">DNI</label>
+          <input type="number" inputmode="numeric" class="inp" id="inp-dni" placeholder="Sin puntos">
+        </div>
+        <button class="btn" id="btn-login">Ingresar</button>
+      </div>
     </div>
+  </div>
 
-    <div id="step-3" class="form-step">
-        <h3>Finalizar</h3>
-        <div id="signature-pad" style="width:100%; height:200px; background:white; border-radius:8px;"></div>
-        <button onclick="enviarFinal()" style="margin-top:20px;">GUARDAR E INSPECCIONAR</button>
+  <!-- ══ DASHBOARD ══ -->
+  <div class="screen" id="scr-dashboard">
+    <div class="dash-body">
+
+      <!-- Sync pendientes -->
+      <div class="sync-row hidden" id="sync-row">
+        <span>🔄 <span id="sync-msg"></span></span>
+        <button id="btn-sync-now">Sincronizar</button>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats">
+        <div class="stat-tile"><span class="stat-n" id="stat-t">0</span><span class="stat-l">Total</span></div>
+        <div class="stat-tile"><span class="stat-n" id="stat-b">0</span><span class="stat-l">Borradores</span></div>
+        <div class="stat-tile"><span class="stat-n" id="stat-g">0</span><span class="stat-l">Generadas</span></div>
+      </div>
+
+      <!-- Búsqueda -->
+      <div class="search-row">
+        <input class="search-inp" id="inp-buscar" placeholder="🔍 Buscar...">
+        <select class="search-sel" id="sel-estado">
+          <option value="">Todos</option>
+          <option value="Borrador">Borrador</option>
+          <option value="Generada">Generada</option>
+        </select>
+      </div>
+
+      <!-- Lista -->
+      <div class="insp-list" id="insp-list"></div>
+      <div class="empty hidden" id="empty-state">
+        <span class="empty-ico">📄</span>
+        <p>Sin inspecciones.<br>Tocá + para crear una.</p>
+      </div>
+
     </div>
+    <button class="fab" id="btn-nueva">+</button>
+  </div>
 
-    <footer>
-        <button onclick="prevStep()" style="background:#475569">Anterior</button>
-        <button onclick="nextStep()">Siguiente</button>
-    </footer>
+  <!-- ══ NUEVA INSPECCIÓN ══ -->
+  <div class="screen" id="scr-nueva">
+    <div class="page-body">
+      <p class="page-title">Nueva Inspección</p>
+      <div class="fg">
+        <label class="lbl">Tipología</label>
+        <select class="sel" id="sel-tip"><option value="">— Seleccioná —</option></select>
+      </div>
+      <div class="fg">
+        <label class="lbl">Establecimiento</label>
+        <input type="text" class="inp" id="inp-estab" placeholder="Nombre del establecimiento">
+      </div>
+      <div class="fg">
+        <label class="lbl">Localidad</label>
+        <input type="text" class="inp" id="inp-localidad" placeholder="Ciudad o localidad">
+      </div>
+      <div class="fg">
+        <label class="lbl">N° Expediente</label>
+        <input type="text" class="inp" id="inp-exp" placeholder="Número de expediente">
+      </div>
+      <br>
+      <button class="btn" id="btn-crear">Continuar al formulario →</button>
+    </div>
+  </div>
 
-    <script>
-        let currentStep = 0;
-        const totalSteps = 4;
+  <!-- ══ FORMULARIO ══ -->
+  <div class="screen" id="scr-form">
+    <div class="chips-bar">
+      <div class="chips-scroll" id="chips"></div>
+    </div>
+    <div class="form-body" id="form-body"></div>
+    <div class="form-footer">
+      <button class="nav-btn" id="btn-prev" disabled>← Anterior</button>
+      <span class="form-pg" id="form-pg">1 / 1</span>
+      <button class="nav-btn fwd" id="btn-next">Siguiente →</button>
+    </div>
+  </div>
 
-        function showStep(n) {
-            document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'));
-            document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-            
-            document.getElementById(`step-${n}`).classList.add('active');
-            document.querySelectorAll('.chip')[n].classList.add('active');
-            currentStep = n;
-            window.scrollTo(0,0);
-        }
+  <!-- ══ DETALLE ══ -->
+  <div class="screen" id="scr-detalle">
+    <div class="det-body">
+      <div class="det-hdr">
+        <div class="det-nombre" id="det-nombre"></div>
+        <div class="det-meta"   id="det-meta"></div>
+        <div class="det-exp"    id="det-exp"></div>
+        <div class="det-badge"  id="det-badge"></div>
+        <div class="det-resumen" id="det-resumen"></div>
+      </div>
 
-        function nextStep() { if(currentStep < totalSteps-1) showStep(currentStep + 1); }
-        function prevStep() { if(currentStep > 0) showStep(currentStep - 1); }
-        if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js')
-    .then(() => console.log("Service Worker Activo"));
-}
-    </script>
+      <div class="det-actions">
+        <button id="btn-editar">✏️ Editar formulario</button>
+        <button class="primary" id="btn-generar">📄 Generar Acta</button>
+      </div>
+
+      <div class="doc-box hidden" id="doc-box">
+        <a href="#" target="_blank" id="doc-link">📄 Abrir Acta en Google Docs →</a>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /screens -->
+
+<script type="module" src="js/app.js"></script>
 </body>
 </html>
