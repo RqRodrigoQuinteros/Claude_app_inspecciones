@@ -1,24 +1,33 @@
-const CACHE_NAME = 'sanidad-v1';
-const ASSETS = [
-  './',
-  './index.html',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap'
-];
+// Service Worker — Inspecciones Sanitarias PWA
+const CACHE = "insp-v1";
+const SHELL = ["./", "./index.html", "./css/app.css", "./js/db.js", "./js/schema.js", "./js/api.js", "./js/app.js", "./manifest.json"];
 
-// Instala el Service Worker y guarda los archivos en caché
-self.addEventListener('install', (e) => {
+self.addEventListener("install", e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener("activate", e => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
-    })
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
-// Responde desde el caché cuando no hay red
-self.addEventListener('fetch', (e) => {
+self.addEventListener("fetch", e => {
+  // Llamadas a la API van siempre por red
+  if (e.request.url.includes("script.google.com")) return;
+
   e.respondWith(
-    caches.match(e.request).then((res) => {
-      return res || fetch(e.request);
-    })
+    caches.match(e.request).then(cached => {
+      if (cached) return cached;
+      return fetch(e.request).then(res => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return res;
+      });
+    }).catch(() => caches.match("./index.html"))
   );
 });
